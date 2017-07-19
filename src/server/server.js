@@ -5,16 +5,20 @@ var express = require('express');
 var app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
+/*충돌 관련 모듈이다.*/
 var SAT = require('sat');
 var sql = require ("mysql");
 
 // Import game settings.
+/*게임 화면 너비 등등의 게임의 기본 세팅 사항들을 json 파일에 저장해 두었다. 그리고 그걸 불러와서 사용한다.*/
 var c = require('../../config.json');
 
 // Import utilities.
+/*거리 계산 관련 함수들과 색깔 정하는 등의 편리한 함수들을 한 파일에 묶에놓고 가져와서 사용하는 듯 하다.*/
 var util = require('./lib/util');
 
 // Import quadtree.
+/*객체 관리하는 tree 같은데 정확히는 모르겠다.*/
 var quadtree = require('simple-quadtree');
 
 //call sqlinfo
@@ -31,9 +35,10 @@ var sockets = {};
 var leaderboard = [];
 var leaderboardChanged = false;
 
+/*원의 방향과 원 객체를 관리하기 위한 객체인듯 싶다.*/
 var V = SAT.Vector;
 var C = SAT.Circle;
-
+/*디비 관련 부분*/
 if(s.host !== "DEFAULT") {
     var pool = sql.createConnection({
         host: s.host,
@@ -49,17 +54,22 @@ if(s.host !== "DEFAULT") {
         }
     });
 }
-
+/*수학에서의 log 함수를 나타내며 사용자가 시작 할 때의 초기 먹이 개수를 정하는 부분인듯 하다.*/
 var initMassLog = util.log(c.defaultPlayerMass, c.slowBase);
 
 app.use(express.static(__dirname + '/../client'));
 
+/*사용자가 이동하면서 먹는 원(food) 생성 관련 메소드*/
 function addFood(toAdd) {
+    /*초반에 사용자 원의 크기를 정하기 위한 함수인듯 하며 먹이를 먹을 때 마다 mass에 2,3...을 주며 일정 비율로 반지름을 늘리는 것 같다*/
+    /*mass는 플레이어가 먹은 먹이의 개수이다.*/
     var radius = util.massToRadius(c.foodMass);
     while (toAdd--) {
         var position = c.foodUniformDisposition ? util.uniformPosition(food, radius) : util.randomPosition(radius);
+        /*food를 어떤 위치에 따라서 생성하고 그 생성시간을 + food의 갯수를 id로 만드는 듯 하다 이렇게 하면 일정 시간 지나면 food를 없앨 수 있을 듯 하다.*/
         food.push({
             // Make IDs unique.
+            /* >>>은 어떤 숫자를 이진수로 나타냈을 때, 그 이진수를 right shift하며 왼쪽을 0으로 채우는 연산자 이다.*/
             id: ((new Date()).getTime() + '' + food.length) >>> 0,
             x: position.x,
             y: position.y,
@@ -70,11 +80,13 @@ function addFood(toAdd) {
     }
 }
 
+/*중간중간에 초록색의, 가시가 달린 애들이 있는 모습을 볼 수 있는데 그걸 생성하는 메소드 인듯 하다.*/
 function addVirus(toAdd) {
     while (toAdd--) {
         var mass = util.randomInRange(c.virus.defaultMass.from, c.virus.defaultMass.to, true);
         var radius = util.massToRadius(mass);
         var position = c.virusUniformDisposition ? util.uniformPosition(virus, radius) : util.randomPosition(radius);
+        /*virus 배열의 맨 마지막에 추가한다.*/
         virus.push({
             id: ((new Date()).getTime() + '' + virus.length) >>> 0,
             x: position.x,
@@ -88,21 +100,31 @@ function addVirus(toAdd) {
     }
 }
 
+
+/*food 없애기*/
 function removeFood(toRem) {
     while (toRem--) {
+        /*food array의 맨 뒤에 있는 food부터 제거한다.*/
         food.pop();
     }
 }
 
+/*플레이어 이동 관련 메소드*/
 function movePlayer(player) {
     var x =0,y =0;
+    /*플레이어 객체에 있는 cell은 플레이어의 기본 mass와 위치(x,y) 반지름을 저장해 두는 배열이다.*/
+    /*아마 스패스바를 눌렀을 때 cell이 늘어날 것 이며 이 배열안에 저장되고 이 배열을 순회하며 모든 cell들을 같이 움직이게 할 것 이다.*/
+    /*mass는 플레이어가 먹은 먹이의 개수이다.*/
+    /*player.target은 client에게서 받은 사용자가 이동하고자 하는 곳의 좌표 객체이다.*/
     for(var i=0; i<player.cells.length; i++)
     {
         var target = {
             x: player.x - player.cells[i].x + player.target.x,
             y: player.y - player.cells[i].y + player.target.y
         };
+        /* 0,0 에서 target 좌표까지의 거리*/
         var dist = Math.sqrt(Math.pow(target.y, 2) + Math.pow(target.x, 2));
+        /*0,0에서 target좌표까지의 기울기*/
         var deg = Math.atan2(target.y, target.x);
         var slowDown = 1;
         if(player.cells[i].speed <= 6.25) {
@@ -126,6 +148,7 @@ function movePlayer(player) {
             player.cells[i].x += deltaX;
         }
         // Find best solution.
+        /*시간 지나면 cell이 합쳐지는 부분인듯 함*/
         for(var j=0; j<player.cells.length; j++) {
             if(j != i && player.cells[i] !== undefined) {
                 var distance = Math.sqrt(Math.pow(player.cells[j].y-player.cells[i].y,2) + Math.pow(player.cells[j].x-player.cells[i].x,2));
@@ -234,7 +257,7 @@ function balanceMass() {
         addVirus(virusToAdd);
     }
 }
-
+/*클라이언트에서 접속이 이루어지고 서버로 요청이 들어오면 받아서 새로운 플레이어를 만들어 준다 그리고 클라이언트에 보내준다..*/
 io.on('connection', function (socket) {
     console.log('A user connected!', socket.handshake.query.type);
 
@@ -271,6 +294,7 @@ io.on('connection', function (socket) {
         }
     };
 
+    /*해당 클라이언트에 socket에 대해 접속할 수 있는지의 여부를 따지고 응답 해 준다.*/
     socket.on('gotit', function (player) {
         console.log('[INFO] Player ' + player.name + ' connecting!');
 
@@ -281,6 +305,7 @@ io.on('connection', function (socket) {
             socket.emit('kick', 'Invalid username.');
             socket.disconnect();
         } else {
+          /*접속할 수 있으면 sockets배열에 사용자id 인덱스에 사용자를 추가한다 그리고 기본 셋팅을 초기화 해 준다.*/
             console.log('[INFO] Player ' + player.name + ' connected!');
             sockets[player.id] = socket;
 
@@ -360,7 +385,7 @@ io.on('connection', function (socket) {
             socket.broadcast.emit('serverMSG', currentPlayer.name + ' just logged in as admin!');
             currentPlayer.admin = true;
         } else {
-            
+
             // TODO: Actually log incorrect passwords.
               console.log('[ADMIN] ' + currentPlayer.name + ' attempted to log in with incorrect password.');
               socket.emit('serverMSG', 'Password incorrect, attempt logged.');
@@ -407,13 +432,15 @@ io.on('connection', function (socket) {
     });
 
     // Heartbeat function, update everytime.
+    // 핑체크
     socket.on('0', function(target) {
         currentPlayer.lastHeartbeat = new Date().getTime();
         if (target.x !== currentPlayer.x || target.y !== currentPlayer.y) {
             currentPlayer.target = target;
         }
     });
-
+    // 이건 뭔지 모르겠다.
+    // 클라이언트의 소스를 보니 feed할 때 이 메소드를 호출한다. 뭘 먹었을 때 처리하는 부분인 듯 하다.
     socket.on('1', function() {
         // Fire food.
         for(var i=0; i<currentPlayer.cells.length; i++)
@@ -443,11 +470,13 @@ io.on('connection', function (socket) {
             }
         }
     });
+    // 사용자 cell이 분열할 때 사용되는 함수 인 듯 하다.
     socket.on('2', function(virusCell) {
         function splitCell(cell) {
             if(cell.mass >= c.defaultPlayerMass*2) {
                 cell.mass = cell.mass/2;
                 cell.radius = util.massToRadius(cell.mass);
+                //추가된 cell을 사용자 객체에 추가해 주는 부분이다.
                 currentPlayer.cells.push({
                     mass: cell.mass,
                     x: cell.x,
@@ -477,7 +506,10 @@ io.on('connection', function (socket) {
     });
 });
 
+// 객체인듯 하다.
+
 function tickPlayer(currentPlayer) {
+    // 응답 시간이 초과되었을 때 연결을 끊는다.
     if(currentPlayer.lastHeartbeat < new Date().getTime() - c.maxHeartbeatInterval) {
         sockets[currentPlayer.id].emit('kick', 'Last heartbeat received over ' + c.maxHeartbeatInterval + ' ago.');
         sockets[currentPlayer.id].disconnect();
@@ -485,15 +517,18 @@ function tickPlayer(currentPlayer) {
 
     movePlayer(currentPlayer);
 
+    //food와 닿았는지 아닌지를 체크하는 듯 하다
     function funcFood(f) {
         return SAT.pointInCircle(new V(f.x, f.y), playerCircle);
     }
 
+    // 먹힌 food를 지우기 위해 사용하는 메소드인 듯 하다.
     function deleteFood(f) {
         food[f] = {};
         food.splice(f, 1);
     }
 
+    //다른 사용자를 먹은것을 판정하는 메소드인 듯 하다.
     function eatMass(m) {
         if(SAT.pointInCircle(new V(m.x, m.y), playerCircle)){
             if(m.id == currentPlayer.id && m.speed > 0 && z == m.num)
@@ -504,6 +539,7 @@ function tickPlayer(currentPlayer) {
         return false;
     }
 
+    // 전체적인 충돌 판정?
     function check(user) {
         for(var i=0; i<user.cells.length; i++) {
             if(user.cells[i].mass > 10 && user.id !== currentPlayer.id) {
@@ -655,6 +691,7 @@ function gameloop() {
 function sendUpdates() {
     users.forEach( function(u) {
         // center the view if x/y is undefined, this will happen for spectators
+        // 유저가 항상 가운데에 보이도록 하는 로직인 듯 하다.
         u.x = u.x || c.gameWidth / 2;
         u.y = u.y || c.gameHeight / 2;
 

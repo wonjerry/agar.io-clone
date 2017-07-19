@@ -272,6 +272,7 @@ function setupSocket(socket) {
     socket.on('RIP', function () {
         global.gameStart = false;
         global.died = true;
+        //일정 시간 간격으로 다시 그려주는 로직인 듯 하다.
         window.setTimeout(function() {
             document.getElementById('gameAreaWrapper').style.opacity = 0;
             document.getElementById('startMenuWrapper').style.maxHeight = '1000px';
@@ -280,7 +281,8 @@ function setupSocket(socket) {
                 window.cancelAnimationFrame(global.animLoopHandle);
                 global.animLoopHandle = undefined;
             }
-        }, 2500);
+        }, 2500);//왜 2500인가?? 2500 간격으로 사용자가 죽었는지 아닌지 검사한다.
+
     });
 
     socket.on('kick', function (data) {
