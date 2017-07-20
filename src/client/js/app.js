@@ -143,6 +143,7 @@ roundFoodSetting.onchange = settings.toggleRoundFood;
 var c = window.canvas.cv;
 var graph = c.getContext('2d');
 
+/*테스트 하려고 달아놓은 jquery 같다.*/
 $( "#feed" ).click(function() {
     socket.emit('1');
     window.canvas.reenviar = false;

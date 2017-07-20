@@ -332,6 +332,7 @@ io.on('connection', function (socket) {
             player.hue = Math.round(Math.random() * 360);
             currentPlayer = player;
             currentPlayer.lastHeartbeat = new Date().getTime();
+            // 현재 들어온 player의 정보를 초기 세팅하고 users 배열에 넣는다.
             users.push(currentPlayer);
 
             io.emit('playerJoin', { name: currentPlayer.name });
